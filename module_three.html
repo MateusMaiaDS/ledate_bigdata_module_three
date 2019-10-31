@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+  <head>
+    <title>Big Data: Primeiros Passos em R</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Ministrante: Mateus Maia     LED Date: Um encontro sobre Estatística e Data Science" />
+    <meta name="date" content="2019-10-31" />
+    <link href="module_three_files/font-awesome/css/fontawesome-all.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="example.css" type="text/css" />
+    <link rel="stylesheet" href="maia-fonts.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Big Data: Primeiros Passos em R
+## ⚔ <br/> Módulo III: Modelagem Estatística (Com ênfase em Aprendizado de Máquina)
+### Ministrante: Mateus Maia <br/> <br/> LED Date: Um encontro sobre Estatística e Data Science <br/> <br/>
+### 2019-10-31
+
+---
+
+
+
+
+# Aprendizado Estatístico de Máquina Supervisionado
+
+&lt;br/&gt;
+&lt;br/&gt;
+.center[![](the_true_black_box_resize-01.png)]
+
+---
+# Aprendizado Estatístico de Máquina Não Supervisionado
+
+&lt;br/&gt;
+&lt;br/&gt;
+.center[![](the_true_black_box_clustering-01.png)]
+
+---
+class: inverse, center, middle
+# Como fazer a estimação dos modelos de maneira distribuída?
+---
+background-image: url(https://miro.medium.com/max/2800/1*b7VXivcK-wBqQJDWjzBszg.png)
+background-size: 200px
+background-position: 90% 8%
+
+#Spark Machine Learning Library
+
+- Biblioteca que contém modelos estatísticos, supervisionados e não supervisionados implementados de maneira distrbuída
+
+- Possui um também um *framework* para *feature engineering*.
+
+- Trabalha com o paradigma de **Transformers** e **Estimators**
+
+- Extensões: **H2O**, **XGB**,...
+
+
+---
+background-image: url(https://media.giphy.com/media/26FfhYBnzPt2PVqI8/giphy.gif)
+background-size: cover
+class: center, middle, inverse
+
+#Será que conseguimos gerar um modelo para prever a eleição de candidatos?
+
+---
+#Importando a base de dados
+
+- Link:
+
+
+```r
+library(sparklyr)
+sc&lt;-spark_connect(master = 'local',version = '2.3')
+
+database&lt;-spark_read_csv(sc,path="D:/my_computer/Est_ML_2019/sparklyr_led_day/database_modulo2_final.csv",
+                                        memory = FALSE,
+                                        charset = 'latin1',
+                                        delimiter = ",")
+```
+
+---
+#Analisando a base
+
+Vamos analisar as covariáveis presentes na base de dados em questão
+
+```r
+#Analisando uma "prévia" da base de dados
+glimpse(database)
+```
+
+```
+## Observations: ??
+## Variables: 17
+## Database: spark_connection
+## $ NM_CANDIDATO            &lt;chr&gt; "GILVANE COSTA SANTOS", "REGINALDO ROD...
+## $ DS_CARGO                &lt;chr&gt; "VEREADOR", "VEREADOR", "VEREADOR", "V...
+## $ DS_GENERO               &lt;chr&gt; "MASCULINO", "MASCULINO", "MASCULINO",...
+## $ TP_AGREMIACAO           &lt;chr&gt; "COLIGAÇÃO", "COLIGAÇÃO", "COLIGAÇÃO",...
+## $ SG_PARTIDO              &lt;chr&gt; "PSC", "PSC", "PSC", "PSC", "PSC", "PR...
+## $ DS_COMPOSICAO_COLIGACAO &lt;chr&gt; "PP / PR / PSC / PEN / SD / PSD", "PP ...
+## $ DS_NACIONALIDADE        &lt;chr&gt; "BRASILEIRA NATA", "BRASILEIRA NATA", ...
+## $ NR_IDADE_DATA_POSSE     &lt;int&gt; 26, 43, 35, 45, 24, 51, 35, 47, 28, 22...
+## $ DS_GRAU_INSTRUCAO       &lt;chr&gt; "SUPERIOR COMPLETO", "ENSINO MÉDIO COM...
+## $ DS_COR_RACA             &lt;chr&gt; "PARDA", "PARDA", "PARDA", "BRANCA", "...
+## $ DS_OCUPACAO             &lt;chr&gt; "TÉCNICO DE ENFERMAGEM E ASSEMELHADOS ...
+## $ NR_DESPESA_MAX_CAMPANHA &lt;int&gt; -1, -1, -1, -1, -1, -1, -1, -1, -1, -1...
+## $ DS_SIT_TOT_TURNO        &lt;chr&gt; "SUPLENTE", "SUPLENTE", "SUPLENTE", "S...
+## $ ST_REELEICAO            &lt;chr&gt; "S", "S", "N", "N", "N", "N", "N", "N"...
+## $ bens_total              &lt;dbl&gt; 37000, 50000, 40000, 100000, 10000, 13...
+## $ n_bens                  &lt;int&gt; 3, 1, 2, 1, 1, 3, 2, 3, 1, 2, 3, 1, 6,...
+## $ votos_total             &lt;int&gt; 69, 960, 558, 142, 105, 5, 264, 96, 15...
+```
+
+---
+#Limpeza dos dados
+
+- Vamos inicialmente considerar apenas os candidatos **vereadores**, e criar um classificador em que a variável resposta seja se este foi eleito ou não. Analisando a covariável "DS_SIT_TOT_TURNO"
+
+
+```r
+database %&gt;% select(DS_SIT_TOT_TURNO) %&gt;% distinct() # Distinct seleciona os valores únicos da coluna
+```
+
+```
+## # Source: spark&lt;?&gt; [?? x 1]
+##   DS_SIT_TOT_TURNO
+##   &lt;chr&gt;           
+## 1 ELEITO POR MÉDIA
+## 2 #NULO#          
+## 3 NÃO ELEITO      
+## 4 ELEITO POR QP   
+## 5 SUPLENTE        
+## 6 2º TURNO        
+## 7 ELEITO
+```
+
+- Selecionaremos da seguinte maneira:
+  - 1 (Eleitos): "ELEITO","ELEITO POR MÉDIA", "ELEITO POR QP"
+  - 0 (Não eleito): "NÃO ELEITO"
+
+Os demais candidatos serão filtrados
+
+
+---
+#Limpeza dos dados
+
+Após a primeira análise das covariáveis relevantes, e dos filtros necessários, 
+vamos pré-processar a base e selecionar as covariáveis
+
+```r
+clean_database&lt;-database %&gt;% 
+                filter(DS_CARGO=="VEREADOR" &amp; DS_SIT_TOT_TURNO!="#NULO#"
+                       &amp; DS_SIT_TOT_TURNO!="SUPLENTE") %&gt;% #Filtra os vereadores, excluindo os nulos e o Supl.
+                mutate(DS_SIT_TOT_TURNO=ifelse(DS_SIT_TOT_TURNO!="NÃO ELEITO",1,0)) %&gt;% #Transforma a var. resp
+                select(DS_GENERO,TP_AGREMIACAO,SG_PARTIDO,DS_NACIONALIDADE,NR_IDADE_DATA_POSSE,DS_GRAU_INSTRUCAO,DS_COR_RACA,DS_SIT_TOT_TURNO,ST_REELEICAO,bens_total,n_bens) #Seleciona as variáveis que serão utilizadas.
+
+glimpse(clean_database)
+```
+
+```
+## Observations: ??
+## Variables: 11
+## Database: spark_connection
+## $ DS_GENERO           &lt;chr&gt; "MASCULINO", "FEMININO", "MASCULINO", "MAS...
+## $ TP_AGREMIACAO       &lt;chr&gt; "COLIGAÇÃO", "COLIGAÇÃO", "COLIGAÇÃO", "CO...
+## $ SG_PARTIDO          &lt;chr&gt; "PP", "PSDC", "PSDC", "PSDC", "PSDC", "PSD...
+## $ DS_NACIONALIDADE    &lt;chr&gt; "BRASILEIRA NATA", "BRASILEIRA NATA", "BRA...
+## $ NR_IDADE_DATA_POSSE &lt;int&gt; 37, 49, 41, 42, 32, 36, 60, 46, 38, 61, 39...
+## $ DS_GRAU_INSTRUCAO   &lt;chr&gt; "ENSINO MÉDIO COMPLETO", "ENSINO MÉDIO COM...
+## $ DS_COR_RACA         &lt;chr&gt; "BRANCA", "PRETA", "PRETA", "BRANCA", "PAR...
+## $ DS_SIT_TOT_TURNO    &lt;dbl&gt; 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...
+## $ ST_REELEICAO        &lt;chr&gt; "S", "N", "N", "N", "N", "N", "N", "N", "N...
+## $ bens_total          &lt;dbl&gt; 8000.0, 28000.0, 3000.0, 130000.0, 84000.0...
+## $ n_bens              &lt;int&gt; 1, 2, 1, 2, 2, 1, 1, 1, 4, 2, 1, 3, 1, 2, ...
+```
+
+---
+class: inverse, center, middle
+# Aprendizado Supervisionado
+---
+# Aprendizado Supervisionado
+
+- Suponha `\({\displaystyle X}\)` como o espaço vetorial de todas possíveis observações.
+
+- sonha `\({\displaystyle Y}\)` como sendo o espaço vetorial de todas variáveis respostas possíveis.
+
+- Dado o espaço de todas funções `\({\mathcal {H}}\)` em que `\(f:X\to Y\)`
+
+### O principal objetivo é estimar uma função `\(\hat{f}\)`, a partir de `\({\vec  {x}} \in {\displaystyle X}\)`, e `\(y \in {\displaystyle Y}\)`, em que `\(\hat{f}({\vec  {x}})\sim y\)`.
+
+---
+#Aplicação: Holdout
+
+.center[![](holdout_rep-01.png)]
+
+---
+# Framework Convencional
+
+```r
+#Data Splitting
+data_splits&lt;-sdf_random_split(clean_database,training=0.8,testing=0.2,seed=42)
+train_data&lt;-data_splits$training
+test_data&lt;-data_splits$testing
+```
+
+
+```r
+#Training and evaluating
+logistic_model&lt;-train_data %&gt;% ml_logistic_regression(DS_SIT_TOT_TURNO~.) #Ajustando regressão logística
+validation_v&lt;-ml_evaluate(logistic_model,test_data) #A funcao ml_evaluate calcula metricas para avaliar a perf.
+predictions&lt;-ml_predict(dataset = test_data,x = logistic_model) #Armazena os valores preditos p/ amost. teste
+
+#Métricas de validação
+#ml_evaluate apresenta diversas metricas de validacao dentro elas a curva roc
+validation_v$area_under_roc()
+```
+
+```
+## [1] 0.8780546
+```
+---
+#Curva ROC
+.pull-left[
+&lt;br/&gt;
+&lt;br/&gt;
+.center[![](roc_curve.png)]
+]
+.pull-right[
+.center[![](cf_matrix.png)
+
+`$$TPR=\frac{TP}{TP+FN}$$`
+`$$FPR=\frac{FP}{FP+TN}$$`
+]]
+
+---
+#Plotando a curva ROC
+
+
+```r
+#Colletando todos valores da coordenada da curva roc considerando todos
+#os threshold,
+roc &lt;- validation_v$roc() %&gt;%
+  collect() #Coleta esses valores para o ambiente R
+
+ggplot(roc, aes(x = FPR, y = TPR)) + #Dá as coordenadas de cada uma das taxa
+  geom_line() + geom_abline(lty = "dashed")+ggtitle("Curva ROC")+theme_bw()
+```
+
+&lt;img src="module_three_files/figure-html/unnamed-chunk-7-1.png" width="350" height="350" /&gt;
+---
+#Outros Modelos
+
+- ml_(*)
+
+.center[![](supervised.png)]
+---
+class: inverse, center, middle
+
+# Aprendizado Não-Supervisionado
+---
+# Aprendizado não supervisionado
+
+.center[![](unsupervised-learning-example.png)]
+---
+#PCA
+
+.center[![](pca_gif.gif)]
+
+
+```r
+#Unsupervised Machine Learning
+unsupervised_data&lt;-copy_to(sc,iris)
+
+#Encontra as componentes principais
+pca_model&lt;-ml_pca(unsupervised_data,features = c("Sepal_Length","Sepal_Width","Petal_Length","Petal_Width"))
+
+#Projeta as observações nessas componentes principais
+pca_data&lt;-sdf_project(newdata =  unsupervised_data,object = pca_model)
+rotated_data&lt;-pca_data %&gt;% select(PC1,PC2,Species) %&gt;% collect
+```
+---
+# PCA
+Plotando o resultado do PCA, temos as observações da base de dados Iris projetadas nas duas componentes principais como sendo:
+
+```r
+ggplot(rotated_data)+
+  geom_point(mapping = aes(x=PC1,y=PC2))+ggtitle("Análise PCA (Iris Data)")+theme_bw()
+```
+
+&lt;img src="module_three_files/figure-html/unnamed-chunk-9-1.png" width="350" height="350" /&gt;
+
+---
+#Clusterização (K-Means)
+.center[![](kmeans_gif.gif)]
+---
+#Clusterização (K-Means)
+
+Uma vez projetada as observações do Iris sobre as duas componentes principais, iremos utilizar estas como base dados para modelar a clusterização utilizando o método k-means
+
+
+```r
+kmeans&lt;-pca_data %&gt;% select(PC1,PC2,Species) %&gt;% #utilizando as base de dados resultado da PCA (PC1,PC2)
+        ml_kmeans(formula = Species~.,k=3)#     Definindo argumentos da clusterização (k centróides)
+
+cluster_pred&lt;-ml_predict(kmeans,
+                         dataset = select(pca_data,PC1,PC2,Species))#Defindo os rótulos
+
+centers&lt;-kmeans$centers %&gt;% collect()#Trazendo os centróides para ambiente R
+
+resultado_clusterizacao_plot&lt;-cluster_pred %&gt;% 
+      select(PC1,PC2,prediction) %&gt;%
+      collect #Coletando result. clus.
+
+#Transformando em Fator
+resultado_clusterizacao_plot$prediction&lt;-as.factor(resultado_clusterizacao_plot$prediction)
+f&lt;-as.factor(c(0,1,2))
+```
+---
+#Clusterização (K-Means)
+
+Plotando o resultado da PCA+K-Means temos:
+
+
+```r
+ggplot(resultado_clusterizacao_plot)+
+  geom_point(mapping = aes(x=PC1,y=PC2,col=prediction))+ggtitle("K-Means (Iris Data)")+theme_bw()+
+  geom_point(data = centers,mapping = aes(x=PC1,y=PC2,col=f),size=5,pch=4,stroke=2)
+```
+
+&lt;img src="module_three_files/figure-html/unnamed-chunk-11-1.png" width="400" height="400" /&gt;
+
+
+---
+class: inverse, center, middle
+
+# Como otimizar este *workflow*?
+---
+background-image: url(pipeline.jpg)
+background-size: cover
+class: center, middle, inverse
+
+# Pipeline
+
+---
+#Pipeline
+
+- O conceito de *pipeline* indica um conjunto de elementos de processamentos de dados que estão diretamentes conectados.
+
+- Para o pipeline do Sparklyr temos os seguintes elementos que o compõe:
+  - DataFrame
+  - Transformador
+  - Estimatador
+  - Parâmetros
+  
+- Para colocar um modelo em produção a utilização de um pipeline é fortemente recomendável
+
+---
+#Transformador
+
+.center[.big["Um **Transformador** pode ser utilizado para aplicar transformações sobre um **DataFrame**, retornando outro" ]]
+
+.center[![](transformador.png)]
+
+### Exemplos:
+- One-Hot-Enconding ("Dummyficação")
+- Predict
+
+---
+#Estimadores
+
+.center[.big["Tecnicamente, um **Estimador** treina um modelo a partir de um **DataFrame**, sendo este modelo um **Transformador**"]]
+
+.center[![](estimator-01.png)]
+
+### Exemplos:
+- ml_logistic_regression()
+---
+#Exemplo: Transformadores
+
+Aqui utilizaremos o primeiro exemplo do que pode vir a ser um transformador. 
+O **ft_string_indexer()** transforma variáveis categóricas em variáveis númericas, como pode-se ver abaixo
+
+```r
+  ft_string_indexer(train_data,input_col = "DS_GENERO",output_col = "index_DS_GENERO") %&gt;%
+  select(index_DS_GENERO) %&gt;% 
+  distinct
+```
+
+```
+## # Source: spark&lt;?&gt; [?? x 1]
+##   index_DS_GENERO
+##             &lt;dbl&gt;
+## 1               1
+## 2               0
+```
+---
+#Exemplo: Estimadores
+
+Para o caso de estimadores existe a função **ft_standard_scaler**, inicialmente propõe-se o "esqueleto" indicando o input, e output desse estimador, além de outros argumentos no sentido de padronizar um conjunto de covariáveis
+
+```r
+scaler&lt;-ft_standard_scaler(sc,
+                   input_col = 'assembler_NR_IDADE_DATA_POSSE',
+                   output_col = 'scaled_idade',
+                   with_mean = TRUE)
+scaler  
+```
+
+```
+## StandardScaler (Estimator)
+## &lt;standard_scaler_2b2444c26436&gt; 
+##  (Parameters -- Column Names)
+##   input_col: assembler_NR_IDADE_DATA_POSSE
+##   output_col: scaled_idade
+##  (Parameters)
+##   with_mean: TRUE
+##   with_std: TRUE
+```
+---
+#Exemplo: Estimadores
+
+- Após criado o "esqueleto" este é ajustado com base no dataset **clean_database** através da função ml_fit()
+
+- A função **ft_vector_assembler()** é um transformador e modifica a estrutura de uma base de dados de modo que ela se transforme em uma lista de valores númericos. Esta ferramenta otimiza e  facilita a utlização em diversos modelos utilizados.
+
+```r
+df&lt;-clean_database %&gt;% 
+ft_vector_assembler(input_cols = "NR_IDADE_DATA_POSSE",
+                    output_col="assembler_NR_IDADE_DATA_POSSE")  
+model_scaler&lt;-ml_fit(scaler,dataset = df)
+model_scaler
+```
+
+```
+## StandardScalerModel (Transformer)
+## &lt;standard_scaler_2b2444c26436&gt; 
+##  (Parameters -- Column Names)
+##   input_col: assembler_NR_IDADE_DATA_POSSE
+##   output_col: scaled_idade
+##  (Transformer Info)
+##   mean:  num 45.4 
+##   std:  num 11.7
+```
+
+---
+#Exemplo: Estimadores
+
+- Por fim, o transformador **ml_transform()** gerado pelo estimador é utilizado  criando a covariável padronizada
+
+```r
+model_scaler %&gt;% 
+  ml_transform(df) %&gt;% #Aplica o transformador
+                       #gerado pelo estimador ft_standard_scaler()
+  glimpse
+```
+
+```
+## Observations: ??
+## Variables: 13
+## Database: spark_connection
+## $ DS_GENERO                     &lt;chr&gt; "MASCULINO", "FEMININO", "MASCUL...
+## $ TP_AGREMIACAO                 &lt;chr&gt; "COLIGAÇÃO", "COLIGAÇÃO", "COLIG...
+## $ SG_PARTIDO                    &lt;chr&gt; "PP", "PSDC", "PSDC", "PSDC", "P...
+## $ DS_NACIONALIDADE              &lt;chr&gt; "BRASILEIRA NATA", "BRASILEIRA N...
+## $ NR_IDADE_DATA_POSSE           &lt;int&gt; 37, 49, 41, 42, 32, 36, 60, 46, ...
+## $ DS_GRAU_INSTRUCAO             &lt;chr&gt; "ENSINO MÉDIO COMPLETO", "ENSINO...
+## $ DS_COR_RACA                   &lt;chr&gt; "BRANCA", "PRETA", "PRETA", "BRA...
+## $ DS_SIT_TOT_TURNO              &lt;dbl&gt; 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,...
+## $ ST_REELEICAO                  &lt;chr&gt; "S", "N", "N", "N", "N", "N", "N...
+## $ bens_total                    &lt;dbl&gt; 8000.0, 28000.0, 3000.0, 130000....
+## $ n_bens                        &lt;int&gt; 1, 2, 1, 2, 2, 1, 1, 1, 4, 2, 1,...
+## $ assembler_NR_IDADE_DATA_POSSE &lt;list&gt; [37, 49, 41, 42, 32, 36, 60, 46...
+## $ scaled_idade                  &lt;list&gt; [-0.7132198, 0.3097922, -0.3722...
+```
+---
+#Previsão eleitoral: Pipeline
+A utilização conjunta de estimadores e transformadores gera o **Pipeline**
+
+```r
+pipeline_eleitoral&lt;-ml_pipeline(sc) %&gt;% 
+  ft_string_indexer(input_col = "DS_GENERO",output_col="gen_index") %&gt;% 
+  ft_string_indexer(input_col = "TP_AGREMIACAO",output_col="agr_index") %&gt;% 
+  ft_string_indexer(input_col = "SG_PARTIDO",output_col="par_index") %&gt;% 
+  ft_string_indexer(input_col = "DS_NACIONALIDADE",output_col="nac_index") %&gt;% 
+  ft_string_indexer(input_col = "DS_GRAU_INSTRUCAO",output_col="int_index") %&gt;% 
+  ft_string_indexer(input_col = "DS_COR_RACA",output_col="rac_index") %&gt;% 
+  ft_string_indexer(input_col = "ST_REELEICAO",output_col="rel_index") %&gt;% 
+  ft_one_hot_encoder_estimator(input_cols = c("gen_index","agr_index","par_index",
+                                   'nac_index','int_index',"rac_index",
+                                   'rel_index'),  
+                     output_cols=c("gen_encoded","agr_encoded","par_encoded",
+                                   'nac_encoded','int_encoded',"rac_encoded",
+                                   'rel_encoded')) %&gt;% 
+  ft_vector_assembler(
+    input_cols = c("NR_IDADE_DATA_POSSE",'bens_total','n_bens',
+                   "gen_encoded","agr_encoded","par_encoded",
+                    'nac_encoded','int_encoded',"rac_encoded",
+                                   'rel_encoded'),
+    output_col = 'features'
+  ) %&gt;% 
+  ft_standard_scaler(input_col = 'features',output_col='features_scaled',with_mean=TRUE) %&gt;% 
+  ml_random_forest_classifier(features_col = 'features_scaled',
+                         label_col='DS_SIT_TOT_TURNO')
+```
+
+---
+#Previsão eleitoral: Pipeline
+
+.pull-left[
+ - O pipeline anterior utiliza em conjunto transformadores e estimadores
+ - Inicialmente os transformadores ft_string_indexer() e one_hot_enconder() funcionam como um pré-processamento das variáveis categóricas.
+ - ft_vector_assembler() combina todas as observaçoes em um "single row-vector"
+ - Enfim, os transformadores ft_standard_scaler() e ml_random_forest_classfier() são os estimadores, sendo este último responsável pela modelagem
+]
+
+.pull-right[
+&lt;br/&gt;
+&lt;br/&gt;
+&lt;br/&gt;
+![](https://miro.medium.com/max/2736/0*T5jaa2othYfXZX9W.)
+]
+---
+#Predizendo as observações
+
+Com o **Pipeline** predizer o modelo se torna uma  tarefa mais simples
+
+```r
+#Ajustando o modelo com base na base de treinamento, utilizando a pipeline
+pipe_model&lt;-ml_fit(pipeline_eleitoral,dataset = train_data)
+
+#Obtendo o resultado da base transformada com as predições novas
+resultado2&lt;-ml_transform(dataset = test_data,x = pipe_model)
+
+#Selecionando as prediçoes
+pred&lt;-resultado2 %&gt;% select(prediction) %&gt;% collect %&gt;% unlist
+#Selecionando os valores observados
+observed&lt;-resultado2 %&gt;% select(DS_SIT_TOT_TURNO) %&gt;% collect %&gt;% unlist
+
+#Criando a matriz de confusão para calcular a acurácia
+acc&lt;-sum(diag(table(pred,observed)))/(sum(table(pred,observed)))
+acc
+```
+
+```
+## [1] 0.7583757
+```
+
+---
+#Tuning
+.center[![](https://cambridgecoding.files.wordpress.com/2016/03/hyperparam_intro_rf_only2.png)]
+---
+#Tuning
+
+```r
+cv &lt;- ml_cross_validator(
+  sc,#Indica a conexão do sparklyr
+  estimator = pipeline_eleitoral, #O estimador será o pipeline já construido
+  estimator_param_maps = list(
+    random_forest=list( #Indica qual método que será testado
+    num_trees = c(5,10,50,100), #Possíveis valores de n_tres
+    impurity = c("entropy", "gini")#Possiveis valores de entropia
+    )
+  ),
+  evaluator = ml_binary_classification_evaluator(sc,label_col = "DS_SIT_TOT_TURNO",raw_prediction_col = "prediction"), #Que métrica de validação será utilizada
+  num_folds = 5, #Numero de folds para validação
+  parallelism = 4) #Parelizando o processo
+
+cv
+```
+
+```
+## CrossValidator (Estimator)
+## &lt;cross_validator_2b241eec7ae6&gt; 
+##  (Parameters -- Tuning)
+##   estimator: Pipeline
+##              &lt;pipeline_2b2412625760&gt; 
+##   evaluator: BinaryClassificationEvaluator
+##              &lt;binary_classification_evaluator_2b24941552a&gt; 
+##     with metric areaUnderROC 
+##   num_folds: 5 
+##   [Tuned over 8 hyperparameter sets]
+```
+
+---
+
+#Tuning
+
+
+```r
+#Ajustando o modelo considerando a base de treinamento
+cv_model &lt;- ml_fit(cv, train_data)
+#Vendo o resultado de cada configuração dos hiperparâmetros
+ml_validation_metrics(cv_model)
+```
+
+```
+##   areaUnderROC impurity_1 num_trees_1
+## 1    0.7471520    entropy           5
+## 2    0.7400953    entropy          10
+## 3    0.7663185    entropy          50
+## 4    0.7642188    entropy         100
+## 5    0.7427896       gini           5
+## 6    0.7548170       gini          10
+## 7    0.7672588       gini          50
+## 8    0.7643017       gini         100
+```
+##Saving the model
+
+
+```r
+model_directory &lt;- file.path("spark_model")
+ml_save(cv_model$best_model, model_directory, overwrite = TRUE)
+```
+
+```
+## Model successfully saved.
+```
+---
+#Convertendo nossa base em Parquet
+- Podemos utilizar a estrutura de pipeline para transformar a nossa base de dados, em um formato totalmente número e posteriormente salvá-la no formato Parquet.
+- **Parquet** é um um formato de arquivo eficiente, ideal para dados numéricos.
+
+
+```r
+pipeline_parquet&lt;-ml_pipeline(sc) %&gt;% 
+  ft_string_indexer(input_col = "DS_GENERO",output_col="gen_index") %&gt;% 
+  ft_string_indexer(input_col = "TP_AGREMIACAO",output_col="agr_index") %&gt;% 
+  ft_string_indexer(input_col = "SG_PARTIDO",output_col="par_index") %&gt;% 
+  ft_string_indexer(input_col = "DS_NACIONALIDADE",output_col="nac_index") %&gt;% 
+  ft_string_indexer(input_col = "DS_GRAU_INSTRUCAO",output_col="int_index") %&gt;% 
+  ft_string_indexer(input_col = "DS_COR_RACA",output_col="rac_index") %&gt;% 
+  ft_string_indexer(input_col = "ST_REELEICAO",output_col="rel_index") %&gt;% 
+  ft_one_hot_encoder_estimator(input_cols = c("gen_index","agr_index","par_index",
+                                   'nac_index','int_index',"rac_index",
+                                   'rel_index'),  
+                     output_cols=c("gen_encoded","agr_encoded","par_encoded",
+                                   'nac_encoded','int_encoded',"rac_encoded",
+                                   'rel_encoded')) 
+```
+
+---
+#Convertendo nossa base em Parquet
+
+Ajustando e transformando a base de dados, e selecionando o resultado do pré-processamento temos
+
+```r
+base_parquet&lt;-ml_fit_and_transform(pipeline_parquet,dataset = clean_database) %&gt;%
+      select(NR_IDADE_DATA_POSSE,bens_total,n_bens,gen_encoded,agr_encoded,par_encoded,
+                                   nac_encoded,int_encoded,rac_encoded,
+                                   rel_encoded)
+
+#Para salvar em parquet, basta:
+spark_write_parquet(base_parquet, "data/clean_database.parquet")
+
+
+#Para ler a base salva, basta simplesmente
+nova_base_parquet&lt;-spark_read_parquet(sc,path = "data/clean_database.parquet")
+```
+---
+class: title-slide-final, middle
+background-image: url(logo.png)
+background-size: 150px
+background-position: 9% 15%
+
+# Perguntas?
+# Obrigado pela atenção
+
+.pull-down[
+
+&lt;a href="mailto:mateusmaia11@gmail.com"&gt;
+.white[<i class="fas  fa-paper-plane "></i>mateusmaia11@gmail.com]
+&lt;/a&gt;
+      
+&lt;a href="https://twitter.com/MateusMaiaM"&gt;
+.white[<i class="fab  fa-twitter "></i> @MateusMaiaM]
+&lt;/a&gt;
+
+&lt;a href="https://github.com/MateusMaiaDS"&gt;
+.white[<i class="fab  fa-github "></i> @MateusMaiaDS]
+&lt;/a&gt;
+
+&lt;a href="http://www.led.ufba.br/"&gt;
+.white[<i class="fas  fa-exclamation "></i> LED - Laboratório de Estatística e Datascience]
+&lt;/a&gt;
+
+&lt;a href="http://ime.ufba.br/"&gt;
+.white[<i class="fas  fa-graduation-cap "></i> Instituto de Matemática e Estatística - UFBA]
+&lt;/a&gt;
+
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+
+]
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();</script>
+
+<script>
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
